@@ -18,13 +18,13 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='Flask-OAuth2-Provider',
-    version='0.1.0',
+    version='0.1.1',
 
-    description='A simple flask oauth provider',
+    description='A simple flask oauth2 provider',
     long_description=long_description,
 
     # The project's main homepage.
-    url='TODO',
+    url='https://github.com/apiwatcher/flask-ouath2-provider',
 
     # Author details
     author='Karel Jakubec',
@@ -39,11 +39,13 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 2 - Pre-Alpha',
+
+        'Framework :: Flask',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers',
-        'Topic :: Software Development :: Authentication Tools',
+        'Topic :: Software Development :: Libraries :: Python Modules',
 
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
@@ -70,7 +72,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'flask', 'urllib3'
+        'flask', 'urllib3', 'jsonschema'
     ],
 
     # List additional groups of dependencies here (e.g. development

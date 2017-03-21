@@ -13,12 +13,14 @@ Flask==0.12
 imagesize==0.7.1
 itsdangerous==0.24
 Jinja2==2.9.5
+jsonschema==2.6.0
 livereload==2.5.1
 MarkupSafe==1.0
 packaging==16.8
 pathtools==0.1.2
 port-for==0.3.1
 Pygments==2.2.0
+pyparsing==2.2.0
 python-dateutil==2.6.0
 pytz==2016.10
 PyYAML==3.12
@@ -29,6 +31,7 @@ snowballstemmer==1.2.1
 Sphinx==1.5.3
 sphinx-autobuild==0.6.0
 tornado==4.4.2
+urllib3==1.20
 waitress==1.0.2
 watchdog==0.8.3
 WebOb==1.7.2

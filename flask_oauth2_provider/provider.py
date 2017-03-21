@@ -229,7 +229,7 @@ class Provider(object):
         except Oauth2Exception as e:
             self._response_maker(
                 "Could not revoke token: {0}".format(e.message),
-                    500
+                500
             )
 
         return self._response_maker("Token revoked", 200)
@@ -243,6 +243,7 @@ class Provider(object):
             @restrict(["user_scope"])
             @app.route("/api/my_endpoint")
             def my_handler():
+
                 return Response("Works", 200)
 
         :param to_scopes: List of scope strings for which resource is accessible
