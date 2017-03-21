@@ -18,7 +18,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='Flask-OAuth2-Provider',
-    version='0.0.1',
+    version='0.1.0',
 
     description='A simple flask oauth provider',
     long_description=long_description,
@@ -55,7 +55,7 @@ setup(
     ],
 
     # What does your project relate to?
-    keywords='oauth uthentication authorization',
+    keywords='oauth authentication authorization',
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
@@ -70,7 +70,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'flask'
+        'flask', 'urllib3'
     ],
 
     # List additional groups of dependencies here (e.g. development
@@ -78,7 +78,7 @@ setup(
     # for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        'dev': ['setuptools'],
+        'dev': ['setuptools', 'Sphnix'],
         'test': [''],
     },
 
