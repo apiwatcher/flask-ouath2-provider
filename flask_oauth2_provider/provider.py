@@ -253,37 +253,41 @@ class Provider(object):
             def decor(*args, **kwargs):
                 auth = request.headers.get("Authorization")
                 if auth is None:
-                    return self._response_maker("Unauthorized", 401)
+                    return self._response_maker(
+                        "No Authorization header.", 401)
 
                 bearer = re.compile("^[Bb]earer\s+(?P<token>\S+)\s*$")
                 res = bearer.search(auth)
                 if res is None:
-                    return self._response_maker("Unauthorized", 401)
+                    return self._response_maker("Wront token format.", 401)
                 token_string = res.group("token")
                 if len(token_string) == 0:
-                    return self._response_maker("Unauthorized", 401)
+                    return self._response_maker("Token string is empty.", 401)
 
                 if self._token_loader is None:
                     raise Oauth2Exception(
-                        "You must set token loader before restricting access"
+                        "You must set token loader before restricting access."
                     )
                 token = self._token_loader(access_token_str=token_string)
                 # No token means it does not exist
                 if token is None:
-                    return self._response_maker("Unauthorized", 401)
+                    return self._response_maker("No token found", 401)
 
                 # Different token returned, error on user side probably
                 if token["access_token"] != token_string:
                     raise Oauth2Exception(
-                        "Different access token returned"
+                        "Different access token returned."
                     )
 
                 if datetime.now(pytz.UTC) > dateutil.parser.parse(token["expires"]):
-                    return self._response_maker("Token expired", 401)
+                    return self._response_maker("Token expired.", 401)
 
                 if to_scopes is not None:
                     if len(set(token["scope"]).intersection(to_scopes)) == 0:
-                        return Response("Unauthorized", 401)
+                        return Response(
+                            "Token scope is different from resource scope.",
+                            401
+                        )
 
                 # Store the stuff in request context
                 ctx = _request_ctx_stack.top
@@ -359,6 +363,31 @@ class Provider(object):
         self._token_saver(new_token)
 
         return new_token
+
+    def verify_client_grant(self, client_id, client_secret):
+        """
+        Verifies whether refresh token is valid and issues a new token.
+        """
+        if self._token_loader is None:
+            raise Oauth2NotImplementedException(
+                "You must set token loader callback before issuing a token"
+            )
+
+        old_token = self._token_loader(refresh_token_str=refresh_token)
+        if old_token is None or old_token["client_id"] != client_id:
+            raise Oauth2InvalidCredentialsException(
+                "Provided refresh token is invalid."
+            )
+
+        new_token = self._create_token(
+            client_id, old_token["scope"], include_refresh=True,
+            user_id=old_token["user_id"]
+        )
+        self._token_revoker(access_token_str=old_token["access_token"])
+        self._token_saver(new_token)
+
+        return new_token
+
 
     # Internal stuff --------------------------------------------------------
 
