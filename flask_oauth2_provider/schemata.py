@@ -43,6 +43,27 @@ class Schemata(object):
                     }
                 },
                 "required": ["client_id", "grant_type", "refresh_token"]
+            },
+            {
+                "type": "object",
+                "description": "Grant for client credentials authorization",
+                "properties": {
+                    "client_id": {
+                        "type": "string"
+                    },
+                    "grant_type": {
+                        "enum": ["client_credentials"]
+                    },
+                    "client_secret": {
+                        "type": ["null", "string"]
+                    },
+                    "scope": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
             }
         ]
     }

@@ -18,8 +18,10 @@ from flask_oauth2_provider.schemata import Schemata
 class Provider(object):
     """Main class taking care about almost everything.
 
-    It should exist as a single instance for one Flask application which must
-    pe passed during init.
+    It should exist as a single instance for each Flask application. The common
+    practice in project which uses just one Flask application at the time is
+    to instantiate this during startup and then share this one instance
+    as global variable or you can wrapper into a singleton class.
     """
 
     # Initializers ------------------------------------------------------------
@@ -46,6 +48,9 @@ class Provider(object):
         # User defined method to verify username-password credentials
         self._password_verifier = None
 
+        # User defined method to verify client credentials
+        self._client_verifier = None
+
         # User defined method to store token
         self._token_saver = None
 
@@ -61,13 +66,15 @@ class Provider(object):
     def init_app(self, app):
         """Initialize class with flask application.
 
+        Use only if application was not passed to provider during __init__.
+        It must be called before application runs.
+
         :param app: Flask application object
         :type app: Flask application
         :returns: None
         """
         self._app = app
         self._do_the_init_()
-
 
     def set_password_verifier(self, f):
         """
@@ -86,11 +93,30 @@ class Provider(object):
         """
         self._password_verifier = f
 
+    def set_client_verifier(self, f):
+        """
+        Set a function which verifies provided client credentials
+
+        Function must accept four parameters:
+            client_id - your client_id object/string
+            scope - list of string scopes for which access should be granted
+            client_secret - a client "password" (may be None)
+
+        Return value is ignored by default, token will be issuesd if passes
+        function passes without exception. In case of invalid credentials
+        Oauth2InvalidCredentialsException should be raised with a reason in
+        message.
+        """
+        self._client_verifier = f
+
     def set_token_saver(self, f):
         """
         Set a function which saves provided token
 
-        Function must accept one parameter:
+        :param f: Function which saves token
+        :type f: function
+
+        Function f must accept one parameter:
             token - a dictinary with token
 
         Token is considered stored if function passes without raising an
@@ -166,6 +192,21 @@ class Provider(object):
 
     def token_resource(self):
         """Instantly creates a token resource
+
+        If your application authorization flow is straightforward, you can user
+        this method to create a token resource. Usage is pretty simple:
+
+        Usage:
+
+        .. code-block:: python
+
+            @app.route("/api/token")
+            def handler():
+
+                retrurn oauth2.token_resource()
+
+        Is uses defined callback and verifies whether provided data are
+        sufficient to issue the token.
         """
         grant_data = Provider._get_data_from_request()
         try:
@@ -195,6 +236,15 @@ class Provider(object):
                     ),
                     201
                 )
+            elif grant_data["grant_type"] == "client_credentials":
+                return self._response_maker(
+                    self.verify_client_grant(
+                        grant_data["client_id"],
+                        grant_data["scope"],
+                        grant_data["client_secret"],
+                    ),
+                    201
+                )
             else:
                 return self._response_maker(
                     "Token for grant {0} is not implemented".format(
@@ -204,12 +254,20 @@ class Provider(object):
                 )
         except Oauth2InvalidCredentialsException as e:
             return self._response_maker(
-                "Invalid credentials supplied", 401
+                u"Invalid credentials supplied: {0}".format(e.message), 401
             )
-
 
     def revoke_resource(self):
         """Instantly creates a revoke resource
+
+        The usage is similar to :func:`Provider.token_resource`.
+
+        .. code-block:: python
+
+            @app.route("/api/revoke")
+            def handler():
+
+                retrurn oauth2.revoke_resource()
         """
         token_data = Provider._get_data_from_request()
 
@@ -224,7 +282,7 @@ class Provider(object):
             self._token_revoker(access_token_str=token_data["access_token"])
         except Oauth2InvalidCredentialsException as e:
             self._response_maker(
-                "Invalid credentials supplied", 401
+                u"Invalid credentials supplied: {0}".format(e.message), 401
             )
         except Oauth2Exception as e:
             self._response_maker(
@@ -237,7 +295,11 @@ class Provider(object):
     def restrict(self, to_scopes=None):
         """Decorate your resource to restrict access to certain scope.
 
+        :param to_scopes: List of scope strings for which resource is accessible
+        :type to_scopes:  list of strings
+
         Usage:
+
         .. code-block:: python
 
             @restrict(["user_scope"])
@@ -246,8 +308,6 @@ class Provider(object):
 
                 return Response("Works", 200)
 
-        :param to_scopes: List of scope strings for which resource is accessible
-        :type to_scopes:  list of strings
         """
         def wrapper(f):
             def decor(*args, **kwargs):
@@ -304,7 +364,7 @@ class Provider(object):
         return wrapper
 
     def make_default_response(self, data, status_code):
-        """Default response maker if you do not provide any other
+        """Default response maker if you do not provide another
 
         If data are dictionary it will dump it to data, otherwise it will just
         pass it to response.
@@ -314,22 +374,36 @@ class Provider(object):
         else:
             return Response(data, status_code)
 
-    def verify_password_grant(self, client_id, scope, username, password):
+    # Token issuing stuff -----------------------------------------------------
+    def issue_token(
+        self, client_id, scope, include_refresh=False, user_id=None
+    ):
         """
-        Verify whether provided credentials are valid and return token
+        Issue token directly and save it.
 
-        This method should be called in token (login) resource. It returns
-        either token (access granted) or None (access refused).  In case of
-        provided password grant verifier raises exceptions, these exceptions
-        may occur as a result of calling this function.
+        :param client_id: Id of the client for which token will be issued
+        :type client_id: string
+        :param scope: A scope of the token
+        :type scope: list of strings
+        :param include_refresh: Whether refresh token should be issued as well
+        :type include_refresh: boolean
+        :param user_id: An id of the user to which token bellows (if any)
+        :type user_id: Whatever is your user id (none for non-user tokens)
+
+        This method should be used direclty only in case of you really know
+        what are you doing. Normaly token should be issued by calling
+        methods :func:`Provider.verify_password_grant`,
+        :func:`Provider.verify_client_grant`, ... which do both verification
+        and token issued at once. But it may happen that your verification
+        process does not map to the standard flow (e.g. using OAuth of 3rd
+        party service to verify user). Im such a case you can issue token
+        directly calling this method.
+
+        .. warning:: It is up to you to verify credentials before you call this
+            to issued the token!
         """
-
-        user_id = self._password_verifier(
-            client_id, scope, username, password
-        )
-
         token = self._create_token(
-            client_id, scope, include_refresh=True, user_id=user_id
+            client_id, scope, include_refresh, user_id
         )
 
         if self._token_saver is None:
@@ -340,9 +414,46 @@ class Provider(object):
         self._token_saver(token)
         return token
 
+    def verify_password_grant(self, client_id, scope, username, password):
+        """
+        Verify provided credentials for password grant and issue token.
+
+        :param client_id: Id of the client for which token will be issued
+        :type client_id: string
+        :param scope: A scope of the token
+        :type scope: list of strings
+        :param username: A string which identifies user
+        :type username: string
+        :param password: A super-secret user password
+        :type password: string
+
+        :returns: Token object
+        """
+        if self._password_verifier is None:
+            raise Oauth2NotImplementedException(
+                "You must set password verifier callback before verifying "
+                "password grant."
+            )
+        user_id = self._password_verifier(
+            client_id, scope, username, password
+        )
+
+        return self.issue_token(client_id, scope, include_refresh=True, user_id=user_id)
+
     def verify_refresh_grant(self, client_id, refresh_token):
         """
-        Verifies whether refresh token is valid and issues a new token.
+        Verify provided refresh token grant and issue new token.
+
+        The old token is revoked so it cannot be used anymore. Scope of the new
+        token is the same as the old token, currently it is not possible to
+        change it.
+
+        :param client_id: Id of the client for which token will be issued
+        :type client_id: string
+        :param refresh_token: A string representing refresh token
+        :type scope: string
+
+        :returns: Token object
         """
         if self._token_loader is None:
             raise Oauth2NotImplementedException(
@@ -355,39 +466,30 @@ class Provider(object):
                 "Provided refresh token is invalid."
             )
 
-        new_token = self._create_token(
+        self._token_revoker(access_token_str=old_token["access_token"])
+
+        return self.issue_token(
             client_id, old_token["scope"], include_refresh=True,
             user_id=old_token["user_id"]
         )
-        self._token_revoker(access_token_str=old_token["access_token"])
-        self._token_saver(new_token)
 
-        return new_token
-
-    def verify_client_grant(self, client_id, client_secret):
+    def verify_client_grant(self, client_id, scope, client_secret):
         """
         Verifies whether refresh token is valid and issues a new token.
         """
-        if self._token_loader is None:
+        if self._client_verifier is None:
             raise Oauth2NotImplementedException(
-                "You must set token loader callback before issuing a token"
+                "You must set client verifier callback before verifying "
+                "client_credentials grant."
             )
 
-        old_token = self._token_loader(refresh_token_str=refresh_token)
-        if old_token is None or old_token["client_id"] != client_id:
-            raise Oauth2InvalidCredentialsException(
-                "Provided refresh token is invalid."
-            )
-
-        new_token = self._create_token(
-            client_id, old_token["scope"], include_refresh=True,
-            user_id=old_token["user_id"]
+        self._client_verifier(
+            client_id, scope, client_secret
         )
-        self._token_revoker(access_token_str=old_token["access_token"])
-        self._token_saver(new_token)
 
-        return new_token
-
+        return self.issue_token(
+            client_id, scope, include_refresh=False
+        )
 
     # Internal stuff --------------------------------------------------------
 
