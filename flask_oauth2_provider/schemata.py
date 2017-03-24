@@ -63,7 +63,10 @@ class Schemata(object):
                             "type": "string"
                         }
                     }
-                }
+                },
+                "required": [
+                    "grant_type", "client_id", "client_secret", "scope"
+                ]
             }
         ]
     }
