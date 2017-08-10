@@ -72,7 +72,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'flask', 'urllib3', 'jsonschema'
+        'flask', 'urllib3', 'jsonschema', 'PyJWT'
     ],
 
     # List additional groups of dependencies here (e.g. development
