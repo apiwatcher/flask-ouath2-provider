@@ -436,6 +436,11 @@ class Provider(object):
             return self._response_maker(
                 "Token is expired.", 401
             )
+        except jwt.DecodeError as e:
+            return self._response_maker(
+                "Token could not be decoded - {0}".format(e.message),
+                401
+            )
 
         if decrypted_token["type"] != "refresh":
             return self._response_maker(
