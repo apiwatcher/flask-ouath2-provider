@@ -18,7 +18,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='Flask-OAuth2-Provider',
-    version='0.2.1',
+    version='0.3.0',
 
     description='A simple flask oauth2 provider',
     long_description=long_description,
@@ -39,7 +39,7 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 3 - Alpha',
 
         'Framework :: Flask',
 
