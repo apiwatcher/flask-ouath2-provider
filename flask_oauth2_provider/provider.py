@@ -216,14 +216,23 @@ class Provider(object):
                 )
             else:
                 return self._response_maker(
-                    "Token for grant {0} is not implemented".format(
+                    u"Unknown grant type '{0}'".format(
                         grant_data["grant_type"]
                     ),
                     400
                 )
         except Oauth2InvalidCredentialsException as e:
             return self._response_maker(
-                u"Invalid credentials supplied: {0}".format(e.message), 401
+                u"Invalid credentials supplied - {0}".format(e.message), 401
+            )
+        except jwt.ExpiredSignatureError:
+            return self._response_maker(
+                "Token is expired.", 401
+            )
+        except jwt.DecodeError as e:
+            return self._response_maker(
+                "Token could not be decoded - {0}".format(e.message),
+                401
             )
 
     def restrict(self, to_scopes=None):
@@ -427,24 +436,20 @@ class Provider(object):
 
         :returns: Token object
         """
-        decrypted_token = None
-        try:
-            decrypted_token = jwt.decode(
-                refresh_token_str, self._secret
-            )
-        except jwt.ExpiredSignatureError:
-            return self._response_maker(
-                "Token is expired.", 401
-            )
-        except jwt.DecodeError as e:
-            return self._response_maker(
-                "Token could not be decoded - {0}".format(e.message),
-                401
+
+        if self._refresh_verifier is None:
+            raise Oauth2NotImplementedException(
+                "You must set refresh verifier callback before verifying "
+                "password grant."
             )
 
+        decrypted_token = jwt.decode(
+            refresh_token_str, self._secret
+        )
+
         if decrypted_token["type"] != "refresh":
-            return self._response_maker(
-                "This is not a refresh token.", 401
+            raise Oauth2InvalidCredentialsException(
+                "This is not a refresh token."
             )
 
         self._refresh_verifier(
