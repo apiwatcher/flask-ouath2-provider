@@ -128,8 +128,7 @@ class Provider(object):
             user_id - access token string used for authorization
 
         Function should return the user data according to provided token.
-        If not user is associated with the token, None should be returned.
-        If no token is found Oauth2TokenNotFoundException should be raised.
+        If no user is associated with the token, None should be returned.
         """
         self._user_loader = f
 
@@ -142,7 +141,6 @@ class Provider(object):
 
         Function should return the client data according to provided token.
         If no client is associated with the token, None should be returned.
-        If no token is found Oauth2TokenNotFoundException should be raised.
         """
         self._client_loader = f
 
@@ -153,7 +151,7 @@ class Provider(object):
 
         Function must accept two mandatory parameters:
             data - data which should be in body (can be dict or string)
-            status_code - integet HTTP status code of response
+            status_code - integer HTTP status code of response
 
         """
         self._response_maker = f
@@ -163,7 +161,7 @@ class Provider(object):
     def token_resource(self):
         """Instantly creates a token resource
 
-        If your application authorization flow is straightforward, you can user
+        If your application authorization flow is straightforward, you can use
         this method to create a token resource. Usage is pretty simple:
 
         Usage:
@@ -175,7 +173,7 @@ class Provider(object):
 
                 retrurn oauth2.token_resource()
 
-        Is uses defined callback and verifies whether provided data are
+        It uses defined callbacks and verifies whether provided data are
         sufficient to issue the token.
         """
         grant_data = Provider._get_data_from_request()

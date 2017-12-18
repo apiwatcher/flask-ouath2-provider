@@ -38,4 +38,4 @@ Issues
 =======
 
 Currently there is no way how to revoke tokens and since we use JWT this
-probably will be fixed.
+probably will not be fixed.
