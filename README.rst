@@ -1,15 +1,22 @@
 A simple flask oauth2 provider
 ================================
 
-This project aims to be lightweight oauth2 provider for flask based
-applications. It uses JWT (PyJWT) to create tokens and thus it does not need
-any storage for the tokens.
+This project aims to be lightweight (not only) oauth2 provider for flask based
+applications.
 
-Functionality now is rather limited - just password and client credentials
-grant authorization + token refresh. The other parts of ouath2 process and some
-documentation are coming soon.
+Currently it supports:
+ - Issuing JWT tokens for password and client_credentials grants
+   - Out of the box support for refresh tokens
+   - No need for storage, token is self contained and it's validity can be
+   checked without accessing DB
+ - Issuing long-term API keys
+   - Not part of the Oauth2 process, however useful for simple scripts or
+   clients unable to manage oauth2 flows
+   - Also self contained, revoking can be implemented for cost of DB access
 
-The project is still in alpha state, API might change a bit in future.
+Authorization_code grant is not supported at this time but it may be added in
+near future.
+
 
 Installation
 =============

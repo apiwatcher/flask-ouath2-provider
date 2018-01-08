@@ -6,15 +6,18 @@ import json
 import dateutil.parser
 import urlparse
 import jwt
+import random
 
 from jsonschema import validate, ValidationError
 from datetime import datetime, timedelta
-from flask import request, Response, _request_ctx_stack
+from flask import request, Response, _request_ctx_stack, redirect
 
 from flask_oauth2_provider.exceptions import Oauth2Exception, \
     Oauth2InvalidCredentialsException, Oauth2NotImplementedException
 from flask_oauth2_provider.schemata import Schemata
 
+from urlparse import parse_qs, urlsplit, urlunsplit
+from urllib import urlencode
 
 class Provider(object):
     """Main class taking care about almost everything.
@@ -61,6 +64,12 @@ class Provider(object):
 
         # User defined method which loads client data
         self._client_loader = None
+
+        # User defined method which saves authorization_code for user
+        self._auth_code_saver = None
+
+        # User defined method which verifies and invalidates authorization code
+        self._auth_code_verifier = None
 
 
     def init_app(self, app):
@@ -156,6 +165,35 @@ class Provider(object):
         """
         self._response_maker = f
 
+
+    def set_auth_code_saver(self, f):
+        """
+        Set a function which persists auth code and user tupple
+
+        Function must accept 5 mandatory parameters:
+            auth_code - string, auth_code
+            user_id - id of the user to whome key belongs
+            client_id - id of application making this requests
+            scope - array of scopes that should be granted
+            expire - UTC time when suth code should expire
+        """
+        self._auth_code_saver = f
+
+
+    def set_auth_code_verifier(self, f):
+        """
+        Set a function which makes Flask Responses in the format you need
+
+        Function must accept two mandatory parameters:
+            auth_code - authorization_code itself
+            client_secret - secret information that client holds
+
+        Function must return user id of user to whome token belongs or raise
+        an exception.
+        """
+        self._auth_code_verifier = f
+
+
     # Built-in resources  -----------------------------------------------------
 
     def token_resource(self):
@@ -188,6 +226,16 @@ class Provider(object):
             if grant_data["grant_type"] == "password":
                 return self._response_maker(
                     self.verify_password_grant(
+                        grant_data["client_id"],
+                        grant_data["scope"],
+                        grant_data["username"],
+                        grant_data["password"]
+                    ),
+                    201
+                )
+            elif grant_data["grant_type"] == "code":
+                return self._response_maker(
+                    self.verify_authorization_code(
                         grant_data["client_id"],
                         grant_data["scope"],
                         grant_data["username"],
@@ -232,6 +280,54 @@ class Provider(object):
                 "Token could not be decoded - {0}".format(e.message),
                 401
             )
+
+    def authorize_resource(self):
+        auth_data = Provider._get_data_from_request()
+        try:
+            validate(auth_data, Schemata.AUTHORIZE_SCHEMA)
+        except ValidationError as e:
+            return self._response_maker(
+                "Wrong data supplied: {0}".format(e.message),
+                400
+            )
+
+        try:
+            user_id = self._password_verifier(
+                auth_data["client_id"], auth_data["scope"],
+                auth_data["username"], auth_data["password"]
+            )
+        except Oauth2InvalidCredentialsException as e:
+            return self._response_maker(
+                u"Invalid credentials supplied - {0}".format(e.message), 401
+            )
+
+        auth_code = self.get_authorization_code()
+
+        self._auth_code_saver(
+            auth_code, user_id, auth_data["client_id"], auth_data["scope"],
+            datetime.utcnow() + timedelta(seconds=self._token_expire)
+        )
+
+        redirect_url = auth_data["redirect_url"]
+        redirect_url = set_query_parameter(redirect_url, "code", auth_code)
+        redirect_url = set_query_parameter(redirect_url,
+            "state", auth_data["state"]
+        )
+
+        return redirect(redirect_url)
+
+    def get_authorization_code(self):
+        alphabet = (
+            u"0123456789"
+            "abcdefghijklmnopqrstuvwxyz"
+        )
+        chars = []
+
+        for i in range(32):
+            chars.append(random.choice(alphabet))
+
+        return "".join(chars)
+
 
     def restrict(self, to_scopes=None):
         """Decorate your resource to restrict access to certain scope.
@@ -329,7 +425,6 @@ class Provider(object):
 
     def issue_token(
         self, client_id, scope, include_refresh=False, user_id=None
-
     ):
         """
         Issue token directly
@@ -355,7 +450,7 @@ class Provider(object):
         .. warning:: It is up to you to verify credentials before you call this
             to issued the token!
         """
-        expire = datetime.now(pytz.UTC) + timedelta(seconds=self._token_expire)
+        expire = datetime.utcnow() + timedelta(seconds=self._token_expire)
 
         access_token = {
             "type": "access",
@@ -371,6 +466,8 @@ class Provider(object):
         rsp = {
             "access_token": access_token_str,
             "expire": expire.isoformat(),
+            "expires_in": self._token_expire,
+            "type": "bearer",
             "refresh_token": None
         }
 
@@ -478,6 +575,26 @@ class Provider(object):
             client_id, scope, include_refresh=False
         )
 
+    def verify_authorization_code(self, client_id, code, client_secret):
+        """
+        Verifies that provided authorization code is valid
+        """
+
+        if self._auth_code_verifier is None:
+            raise Oauth2NotImplementedException(
+                "You must set auth code verifier callback before verifying "
+                "code grant."
+            )
+
+        user_id, scope = self._auth_code_verifier(
+            client_id, code, client_secret
+        )
+
+        return self.issue_token(
+            user_id, scope, include_refresh=True
+        )
+
+
     # Internal stuff --------------------------------------------------------
     def _do_the_init_(self):
         if "OAUTH2_TOKEN_EXPIRE" not in self._app.config:
@@ -496,12 +613,19 @@ class Provider(object):
 
     @staticmethod
     def _get_data_from_request():
+
+        content_type = request.headers.get("content_type", None)
+
         request_data = {}
         if request.is_json:
             request_data = request.json
         else:
-            for key, value in request.args.iteritems():
-                request_data[key] = value
+            if content_type == "application/x-www-form-urlencoded":
+                for key, value in request.form.iteritems():
+                    request_data[key] = value
+            else:
+                for key, value in request.args.iteritems():
+                    request_data[key] = value
 
             if "scope" in request_data and request_data["scope"] is not None:
                 request_data["scope"] = request_data["scope"].split(",")
@@ -537,3 +661,20 @@ def get_client_data():
         return ctx.oauth2_data["client"]
     else:
         return None
+
+
+# Helper methods
+def set_query_parameter(url, param_name, param_value):
+    """Given a URL, set or replace a query parameter and return the
+    modified URL.
+
+    >>> set_query_parameter('http://example.com?foo=bar&biz=baz', 'foo', 'stuff')
+    'http://example.com?foo=stuff&biz=baz'
+    """
+    scheme, netloc, path, query_string, fragment = urlsplit(url)
+    query_params = parse_qs(query_string)
+
+    query_params[param_name] = [param_value]
+    new_query_string = urlencode(query_params, doseq=True)
+
+    return urlunsplit((scheme, netloc, path, new_query_string, fragment))
