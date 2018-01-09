@@ -6,15 +6,18 @@ import json
 import dateutil.parser
 import urlparse
 import jwt
+import random
 
 from jsonschema import validate, ValidationError
 from datetime import datetime, timedelta
-from flask import request, Response, _request_ctx_stack
+from flask import request, Response, _request_ctx_stack, redirect
 
 from flask_oauth2_provider.exceptions import Oauth2Exception, \
     Oauth2InvalidCredentialsException, Oauth2NotImplementedException
 from flask_oauth2_provider.schemata import Schemata
 
+from urlparse import parse_qs, urlsplit, urlunsplit
+from urllib import urlencode
 
 class Provider(object):
     """Main class taking care about almost everything.
@@ -544,3 +547,20 @@ def get_client_data():
         return ctx.oauth2_data["client"]
     else:
         return None
+
+
+# Helper methods
+def set_query_parameter(url, param_name, param_value):
+    """Given a URL, set or replace a query parameter and return the
+    modified URL.
+
+    >>> set_query_parameter('http://example.com?foo=bar&biz=baz', 'foo', 'stuff')
+    'http://example.com?foo=stuff&biz=baz'
+    """
+    scheme, netloc, path, query_string, fragment = urlsplit(url)
+    query_params = parse_qs(query_string)
+
+    query_params[param_name] = [param_value]
+    new_query_string = urlencode(query_params, doseq=True)
+
+    return urlunsplit((scheme, netloc, path, new_query_string, fragment))
