@@ -191,7 +191,7 @@ class Provider(object):
             auth_code - authorization_code itself
             client_secret - secret information that client holds
 
-        Function must return user tuple (user_id, scope)
+        Function must return user tuple (user_id, client_id, scope)
         """
         self._auth_code_verifier = f
 
@@ -620,7 +620,7 @@ class Provider(object):
                 "code grant."
             )
 
-        user_id, scope = self._auth_code_verifier(
+        user_id, client_id, scope = self._auth_code_verifier(
             code, client_secret
         )
 
@@ -633,7 +633,7 @@ class Provider(object):
         self._auth_code_invalidator(code)
 
         return self.issue_token(
-            user_id, scope, include_refresh=True
+            client_id, scope, include_refresh=True, user_id=user_id
         )
 
 
