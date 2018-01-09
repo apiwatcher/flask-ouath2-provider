@@ -496,12 +496,19 @@ class Provider(object):
 
     @staticmethod
     def _get_data_from_request():
+
+        content_type = request.headers.get("content_type", None)
+
         request_data = {}
         if request.is_json:
             request_data = request.json
         else:
-            for key, value in request.args.iteritems():
-                request_data[key] = value
+            if content_type == "application/x-www-form-urlencoded":
+                for key, value in request.form.iteritems():
+                    request_data[key] = value
+            else:
+                for key, value in request.args.iteritems():
+                    request_data[key] = value
 
             if "scope" in request_data and request_data["scope"] is not None:
                 request_data["scope"] = request_data["scope"].split(",")
