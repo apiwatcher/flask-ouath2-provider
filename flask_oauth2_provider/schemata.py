@@ -30,6 +30,27 @@ class Schemata(object):
             },
             {
                 "type": "object",
+                "description": "Grant for authorization-code authentication",
+                "properties": {
+                    "grant_type": {
+                        "enum": ["authorization_code", "code"]
+                    },
+                    "client_id": {
+                        "type": "string"
+                    },
+                    "client_secret": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "client_id", "grant_type", "client_secret", "code"
+                ]
+            },
+            {
+                "type": "object",
                 "description": "Grant for refresh-token authentication",
                 "properties": {
                     "client_id": {
@@ -79,4 +100,39 @@ class Schemata(object):
             }
         },
         "required": ["access_token"]
+    }
+
+    AUTHORIZE_SCHEMA = {
+        "type": "object",
+        "description": "Grant for authorization",
+        "properties": {
+            "response_type": {
+                "enum": ["code"]
+            },
+            "client_id": {
+                "type": "string"
+            },
+            "username": {
+                "type": "string"
+            },
+            "password": {
+                "type": "string"
+            },
+            "state": {
+                "type": "string"
+            },
+            "scope": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "redirect_url": {
+                "type": "string"
+            }
+        },
+        "required": [
+            "client_id", "username", "password", "scope", "redirect_url",
+            "state", "response_type"
+        ]
     }

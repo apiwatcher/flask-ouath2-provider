@@ -65,6 +65,15 @@ class Provider(object):
         # User defined method which loads client data
         self._client_loader = None
 
+        # User defined method which saves authorization_code for user
+        self._auth_code_saver = None
+
+        # User defined method which verifies and invalidates authorization code
+        self._auth_code_verifier = None
+
+        # User defined method which invalidates authorization code
+        self._auth_code_invalidator = None
+
 
     def init_app(self, app):
         """Initialize class with flask application.
@@ -159,6 +168,47 @@ class Provider(object):
         """
         self._response_maker = f
 
+
+    def set_auth_code_saver(self, f):
+        """
+        Set a function which persists auth code and user tupple
+
+        Function must accept 5 mandatory parameters:
+            auth_code - string, auth_code
+            user_id - id of the user to whome key belongs
+            client_id - id of application making this requests
+            scope - array of scopes that should be granted
+            expire - UTC time when suth code should expire
+        """
+        self._auth_code_saver = f
+
+
+    def set_auth_code_verifier(self, f):
+        """
+        Set a function which verifies that auth code is valid
+
+        Function must accept two mandatory parameters:
+            auth_code - authorization_code itself
+            client_secret - secret information that client holds
+
+        Function must return user tuple (user_id, scope)
+        """
+        self._auth_code_verifier = f
+
+
+    def set_auth_code_invalidator(self, f):
+        """
+        Set a function which invalidates authorization code
+
+        Function must accept two mandatory parameters:
+            auth_code - authorization_code itself
+
+        Function return value is ignored
+        """
+        self._auth_code_invalidator = f
+
+
+
     # Built-in resources  -----------------------------------------------------
 
     def token_resource(self):
@@ -195,6 +245,17 @@ class Provider(object):
                         grant_data["scope"],
                         grant_data["username"],
                         grant_data["password"]
+                    ),
+                    201
+                )
+            elif (
+                grant_data["grant_type"] == "authorization_code" or
+                grant_data["grant_type"] == "code"
+            ):
+                return self._response_maker(
+                    self.verify_authorization_code(
+                        grant_data["code"],
+                        grant_data["client_secret"]
                     ),
                     201
                 )
@@ -235,6 +296,72 @@ class Provider(object):
                 "Token could not be decoded - {0}".format(e.message),
                 401
             )
+
+    def authorize_resource(self):
+        """
+        Instantly creates a authorize resource
+
+        If your application authorization flow is straightforward, you can use
+        this method to create a authorization resource. Usage is pretty simple:
+
+        Usage:
+
+        .. code-block:: python
+
+            @app.route("/api/authorize")
+            def handler():
+
+                retrurn oauth2.authorize_resource()
+
+        It uses defined callbacks and verifies whether provided data are
+        sufficient to issue the token.
+        """
+        auth_data = Provider._get_data_from_request()
+        try:
+            validate(auth_data, Schemata.AUTHORIZE_SCHEMA)
+        except ValidationError as e:
+            return self._response_maker(
+                "Wrong data supplied: {0}".format(e.message),
+                400
+            )
+
+        try:
+            user_id = self._password_verifier(
+                auth_data["client_id"], auth_data["scope"],
+                auth_data["username"], auth_data["password"]
+            )
+        except Oauth2InvalidCredentialsException as e:
+            return self._response_maker(
+                u"Invalid credentials supplied - {0}".format(e.message), 401
+            )
+
+        auth_code = self.get_authorization_code()
+
+        self._auth_code_saver(
+            auth_code, user_id, auth_data["client_id"], auth_data["scope"],
+            datetime.utcnow() + timedelta(seconds=self._token_expire)
+        )
+
+        redirect_url = auth_data["redirect_url"]
+        redirect_url = set_query_parameter(redirect_url, "code", auth_code)
+        redirect_url = set_query_parameter(redirect_url,
+            "state", auth_data["state"]
+        )
+
+        return redirect(redirect_url)
+
+    def get_authorization_code(self):
+        alphabet = (
+            u"0123456789"
+            "abcdefghijklmnopqrstuvwxyz"
+        )
+        chars = []
+
+        for i in range(128):
+            chars.append(random.choice(alphabet))
+
+        return "".join(chars)
+
 
     def restrict(self, to_scopes=None):
         """Decorate your resource to restrict access to certain scope.
@@ -332,7 +459,6 @@ class Provider(object):
 
     def issue_token(
         self, client_id, scope, include_refresh=False, user_id=None
-
     ):
         """
         Issue token directly
@@ -358,7 +484,7 @@ class Provider(object):
         .. warning:: It is up to you to verify credentials before you call this
             to issued the token!
         """
-        expire = datetime.now(pytz.UTC) + timedelta(seconds=self._token_expire)
+        expire = datetime.utcnow() + timedelta(seconds=self._token_expire)
 
         access_token = {
             "type": "access",
@@ -374,6 +500,8 @@ class Provider(object):
         rsp = {
             "access_token": access_token_str,
             "expire": expire.isoformat(),
+            "expires_in": self._token_expire,
+            "type": "bearer",
             "refresh_token": None
         }
 
@@ -480,6 +608,34 @@ class Provider(object):
         return self.issue_token(
             client_id, scope, include_refresh=False
         )
+
+    def verify_authorization_code(self, code, client_secret):
+        """
+        Verifies that provided authorization code is valid
+        """
+
+        if self._auth_code_verifier is None:
+            raise Oauth2NotImplementedException(
+                "You must set auth code verifier callback before verifying "
+                "code grant."
+            )
+
+        user_id, scope = self._auth_code_verifier(
+            code, client_secret
+        )
+
+        if self._auth_code_invalidator is None:
+            raise Oauth2NotImplementedException(
+                "You must set auth code invalider callback before using "
+                "code grant."
+            )
+
+        self._auth_code_invalidator(code)
+
+        return self.issue_token(
+            user_id, scope, include_refresh=True
+        )
+
 
     # Internal stuff --------------------------------------------------------
     def _do_the_init_(self):
