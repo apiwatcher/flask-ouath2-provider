@@ -33,7 +33,7 @@ Sphinx==1.5.3
 sphinx-autobuild==0.6.0
 tornado==4.4.2
 urllib3==1.20
-waitress==1.0.2
+waitress==1.4.1
 watchdog==0.8.3
 WebOb==1.7.2
 WebTest==2.0.27
