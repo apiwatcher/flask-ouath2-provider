@@ -5,7 +5,7 @@ autodoc==0.3
 Babel==2.3.4
 backports-abc==0.5
 beautifulsoup4==4.5.3
-certifi==2017.1.23
+certifi==2022.12.7
 click==6.7
 decorator==4.0.11
 docutils==0.13.1
